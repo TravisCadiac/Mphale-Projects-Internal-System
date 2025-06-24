@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mphale Projects Internal System - Firebase Version</title>
+<style>
+  body { font-family: Arial, sans-serif; background: #f2f2f2; margin: 0; padding: 0; }
+  .container { max-width: 1000px; margin: 20px auto; padding: 20px; background: #fff; }
+  input, textarea, select, button {
+    width: 100%; margin: 10px 0; padding: 10px; box-sizing: border-box;
+  }
+  .hidden { display: none; }
+  .module { border: 1px solid #ccc; padding: 15px; margin: 20px 0; border-radius: 5px; background:#fafafa; }
+  h3 { margin-top: 0; }
+  ul { padding-left: 20px; }
+  li { margin-bottom: 6px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div id="loginSection">
+    <h2>Login</h2>
+    <input id="username" placeholder="Username" autocomplete="off" />
+    <input id="password" type="password" placeholder="Password" autocomplete="off" />
+    <button onclick="login()">Login</button>
+    <p id="loginError" style="color:red;"></p>
+  </div>
+
+  <div id="dashboard" class="hidden">
+    <h2>Dashboard (<span id="roleTitle"></span>)</h2>
+    <button onclick="logout()">Logout</button>
+    <div id="modulesContainer"></div>
+  </div>
+</div>
+
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+<script>
+// Firebase config
+const firebaseConfig = {
+  apiKey: "AIzaSyDNvTmOzuxwDcMZWN3bgq_-ijVF4xiGBXs",
+  authDomain: "mphale-projects-is.firebaseapp.com",
+  projectId: "mphale-projects-is",
+  storageBucket: "mphale-projects-is.appspot.com",
+  messagingSenderId: "653493738162",
+  appId: "1:653493738162:web:be300134619efa931947ab"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+const users = {
+  director: { password: "Director123", role: "Director" },
+  finance: { password: "Finance123", role: "Finance Manager" },
+  hr: { password: "HR123", role: "HR Officer" },
+  pm: { password: "PM123", role: "Project Manager" },
+  tender: { password: "Tender123", role: "Tender Officer" },
+  bda: { password: "BDA123", role: "Business Dev Assistant" }
+};
+
+let currentUser = null;
+
+function login() {
+  const u = document.getElementById('username').value.toLowerCase().trim();
+  const p = document.getElementById('password').value;
+  const err = document.getElementById('loginError');
+  if (users[u] && users[u].password === p) {
+    currentUser = { username: u, ...users[u] };
+    document.getElementById("loginSection").classList.add("hidden");
+    document.getElementById("dashboard").classList.remove("hidden");
+    document.getElementById("roleTitle").innerText = currentUser.role;
+    loadModules();
+    err.innerText = "";
+  } else {
+    err.innerText = "Invalid username or password";
+  }
+}
+
+function logout() {
+  currentUser = null;
+  document.getElementById("dashboard").classList.add("hidden");
+  document.getElementById("loginSection").classList.remove("hidden");
+  document.getElementById("username").value = "";
+  document.getElementById("password").value = "";
+  document.getElementById("modulesContainer").innerHTML = "";
+}
+
+async function loadModules() {
+  const container = document.getElementById("modulesContainer");
+  container.innerHTML = "";
+
+  if (["Director", "HR Officer"].includes(currentUser.role)) {
+    container.innerHTML += `<div class='module'>
+      <h3>HR Management</h3>
+      <input id='empName' placeholder='Employee Name' autocomplete='off' />
+      <select id='empRole'>
+        <option value='Project Manager'>Project Manager</option>
+        <option value='Finance Manager'>Finance Manager</option>
+        <option value='Tender Officer'>Tender Officer</option>
+        <option value='Business Dev Assistant'>Business Dev Assistant</option>
+        <option value='HR Officer'>HR Officer</option>
+        <option value='Director'>Director</option>
+      </select>
+      <button onclick='addEmployee()'>Add Employee</button>
+      <ul id='employeeList'></ul>
+    </div>`;
+    await displayEmployees();
+  }
+
+  if (["Director", "Finance Manager"].includes(currentUser.role)) {
+    container.innerHTML += `<div class='module'>
+      <h3>Finance Management</h3>
+      <input id='financeDesc' placeholder='Description' autocomplete='off' />
+      <input id='financeAmount' type='number' placeholder='Amount (R)' />
+      <select id='financeType'>
+        <option value='Income'>Income</option>
+        <option value='Expense'>Expense</option>
+      </select>
+      <button onclick='addFinance()'>Add Record</button>
+      <ul id='financeList'></ul>
+    </div>`;
+    await displayFinance();
+  }
+
+  container.innerHTML += `<div class='module'>
+    <h3>Internal Messaging</h3>
+    <input id='msgTo' placeholder='To Username' />
+    <input id='msgSubject' placeholder='Subject' />
+    <textarea id='msgBody' placeholder='Message'></textarea>
+    <button onclick='sendMessage()'>Send</button>
+    <ul id='inboxList'></ul>
+  </div>`;
+  await displayMessages();
+}
+
+async function addEmployee() {
+  const name = document.getElementById('empName').value.trim();
+  const role = document.getElementById('empRole').value;
+  if (!name) return alert("Name required");
+  try {
+    await db.collection('employees').add({ name, role, addedAt: new Date() });
+    document.getElementById('empName').value = "";
+    await displayEmployees();
+  } catch (e) {
+    alert("Error: " + e.message);
+  }
+}
+
+async function displayEmployees() {
+  const ul = document.getElementById('employeeList');
+  if (!ul) return;
+  ul.innerHTML = "Loading...";
+  const snapshot = await db.collection('employees').orderBy('addedAt', 'desc').get();
+  ul.innerHTML = "";
+  snapshot.forEach(doc => {
+    const e = doc.data();
+    ul.innerHTML += `<li>${e.name} - ${e.role}</li>`;
+  });
+}
+
+async function addFinance() {
+  const desc = document.getElementById('financeDesc').value.trim();
+  const amount = parseFloat(document.getElementById('financeAmount').value);
+  const type = document.getElementById('financeType').value;
+  if (!desc || isNaN(amount)) return alert("Fill all fields");
+  await db.collection('finance').add({ desc, amount, type, addedAt: new Date() });
+  document.getElementById('financeDesc').value = "";
+  document.getElementById('financeAmount').value = "";
+  await displayFinance();
+}
+
+async function displayFinance() {
+  const ul = document.getElementById('financeList');
+  if (!ul) return;
+  ul.innerHTML = "Loading...";
+  const snapshot = await db.collection('finance').orderBy('addedAt', 'desc').get();
+  let balance = 0;
+  ul.innerHTML = "";
+  snapshot.forEach(doc => {
+    const f = doc.data();
+    ul.innerHTML += `<li><b>${f.type}</b>: ${f.desc} - R${f.amount.toFixed(2)}</li>`;
+    balance += (f.type === "Income" ? f.amount : -f.amount);
+  });
+  ul.innerHTML += `<li><b>Total Balance:</b> R${balance.toFixed(2)}</li>`;
+}
+
+async function sendMessage() {
+  const to = document.getElementById('msgTo').value.trim();
+  const subject = document.getElementById('msgSubject').value.trim();
+  const body = document.getElementById('msgBody').value.trim();
+  if (!to || !subject || !body) return alert("Fill all fields");
+  await db.collection('messages').add({ to, subject, body, sentAt: new Date() });
+  document.getElementById('msgTo').value = "";
+  document.getElementById('msgSubject').value = "";
+  document.getElementById('msgBody').value = "";
+  await displayMessages();
+}
+
+async function displayMessages() {
+  const ul = document.getElementById('inboxList');
+  if (!ul) return;
+  const snapshot = await db.collection('messages').orderBy('sentAt', 'desc').get();
+  ul.innerHTML = "";
+  snapshot.forEach(doc => {
+    const m = doc.data();
+    ul.innerHTML += `<li><b>${m.subject}</b>: ${m.body}</li>`;
+  });
+}
+</script>
+</body>
+</html>
